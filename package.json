@@ -1,19 +1,19 @@
 {
-  "name": "n8n-nodes-<...>",
+  "name": "n8n-nodes-arangodb",
   "version": "0.1.0",
-  "description": "",
+  "description": "n8n node for ArangoDB",
   "keywords": [
     "n8n-community-node-package"
   ],
   "license": "MIT",
-  "homepage": "",
+  "homepage": "https://github.com/kravuar/n8n-nodes-arangodb",
   "author": {
-    "name": "",
-    "email": ""
+    "name": "Kravuan",
+    "email": "etopochtadaetomoyapochta@gmail.com"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/<...>/n8n-nodes-<...>.git"
+    "url": "git+https://github.com/kravuar/n8n-nodes-arangodb/n8n-nodes-arangodb.git"
   },
   "engines": {
     "node": ">=20.15"
@@ -33,12 +33,10 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/ExampleCredentialsApi.credentials.js",
-      "dist/credentials/HttpBinApi.credentials.js"
+      "dist/credentials/ArangoDBCredentialsApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/ExampleNode/ExampleNode.node.js",
-      "dist/nodes/HttpBin/HttpBin.node.js"
+      "dist/nodes/ArangoDB/ArangoDBNode.node.js"
     ]
   },
   "devDependencies": {
@@ -51,5 +49,8 @@
   },
   "peerDependencies": {
     "n8n-workflow": "*"
+  },
+  "dependencies": {
+    "arangojs": "^10.1.1"
   }
 }
