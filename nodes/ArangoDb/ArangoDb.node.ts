@@ -7,7 +7,7 @@ import type {
 import { NodeApiError, NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 import { Database, aql } from 'arangojs';
 
-export class ArangoDB implements INodeType {
+export class ArangoDb implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ArangoDB',
 		name: 'arangoDb',
@@ -225,22 +225,17 @@ export class ArangoDB implements INodeType {
 				},
 				options: [
 					{
-						name: 'Search',
-						value: 'search',
-						description: 'Perform a vector similarity search',
+						name: 'Search Cosine',
+						value: 'searchCosine',
+						description: 'Perform a vector similarity search using cosine similarity',
 					},
 					{
-						name: 'Create Index',
-						value: 'createIndex',
-						description: 'Create a vector search index',
-					},
-					{
-						name: 'Delete Index',
-						value: 'deleteIndex',
-						description: 'Delete a vector search index',
+						name: 'Search L2',
+						value: 'searchL2',
+						description: 'Perform a vector similarity search using L2 distance',
 					},
 				],
-				default: 'search',
+				default: 'searchCosine',
 				noDataExpression: true,
 			},
 			{
@@ -263,7 +258,7 @@ export class ArangoDB implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['vectorSearch'],
-						vectorOperation: ['search', 'createIndex'],
+						vectorOperation: ['searchCosine', 'searchL2'],
 					},
 				},
 				default: 'vector',
@@ -277,7 +272,7 @@ export class ArangoDB implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['vectorSearch'],
-						vectorOperation: ['search'],
+						vectorOperation: ['searchCosine', 'searchL2'],
 					},
 				},
 				default: '[]',
@@ -291,66 +286,11 @@ export class ArangoDB implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['vectorSearch'],
-						vectorOperation: ['search'],
+						vectorOperation: ['searchCosine', 'searchL2'],
 					},
 				},
 				default: 10,
 				description: 'Number of nearest neighbors to return',
-			},
-			{
-				displayName: 'Index Name',
-				name: 'indexName',
-				type: 'string',
-				displayOptions: {
-					show: {
-						resource: ['vectorSearch'],
-						vectorOperation: ['createIndex', 'deleteIndex'],
-					},
-				},
-				default: '',
-				required: true,
-				description: 'The name of the vector index',
-			},
-			{
-				displayName: 'Dimensions',
-				name: 'dimensions',
-				type: 'number',
-				displayOptions: {
-					show: {
-						resource: ['vectorSearch'],
-						vectorOperation: ['createIndex'],
-					},
-				},
-				default: 128,
-				required: true,
-				description: 'The number of dimensions in the vectors',
-			},
-			{
-				displayName: 'Distance Metric',
-				name: 'distanceMetric',
-				type: 'options',
-				displayOptions: {
-					show: {
-						resource: ['vectorSearch'],
-						vectorOperation: ['createIndex'],
-					},
-				},
-				options: [
-					{
-						name: 'Euclidean',
-						value: 'euclidean',
-					},
-					{
-						name: 'Cosine',
-						value: 'cosine',
-					},
-					{
-						name: 'Manhattan',
-						value: 'manhattan',
-					},
-				],
-				default: 'euclidean',
-				description: 'The distance metric to use',
 			},
 
 			// Graph Operations
@@ -380,9 +320,19 @@ export class ArangoDB implements INodeType {
 						description: 'Create a new graph',
 					},
 					{
+						name: 'Delete Edge',
+						value: 'deleteEdge',
+						description: 'Delete an edge from the graph',
+					},
+					{
 						name: 'Delete Graph',
 						value: 'deleteGraph',
 						description: 'Delete a graph',
+					},
+					{
+						name: 'Delete Vertex',
+						value: 'deleteVertex',
+						description: 'Delete a vertex from the graph',
 					},
 					{
 						name: 'Get Neighbors',
@@ -488,7 +438,7 @@ export class ArangoDB implements INodeType {
 						customOperation: ['runTransaction'],
 					},
 				},
-				default: '',
+				default: 'function (params) { const db = require(\'@arangodb\').db; return db._query(`RETURN { message: \'Hello from transaction\', params: ${JSON.stringify(params)} }`).toArray(); }',
 				required: true,
 				description: 'The transaction action code (JavaScript function as string)',
 				typeOptions: {
@@ -505,7 +455,7 @@ export class ArangoDB implements INodeType {
 						customOperation: ['bulkOperation'],
 					},
 				},
-				default: '[{"operation": "insert", "collection": "myCollection", "data": []}]',
+				default: '[{"operation": "insert", "collection": "myCollection", "data": [{"_key": "doc1", "value": 1}, {"value": 2}]}]',
 				required: true,
 				description: 'Array of bulk operations to execute',
 				typeOptions: {
@@ -601,12 +551,12 @@ export class ArangoDB implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['graph'],
-						graphOperation: ['addVertex'],
+						graphOperation: ['addVertex', 'deleteVertex'],
 					},
 				},
-				default: '',
+				default: '{"_from": "collection/key", "_to": "collection/key"}',
 				required: true,
-				description: 'The vertex collection to add to',
+				description: 'The edge data as JSON (must include _from and _to)',
 			},
 			{
 				displayName: 'Edge Data',
@@ -629,12 +579,11 @@ export class ArangoDB implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['graph'],
-						graphOperation: ['addEdge'],
+						graphOperation: ['addEdge', 'deleteEdge'],
 					},
 				},
-				default: '',
-				required: true,
-				description: 'The edge collection to add to',
+				default: '{ "param1": "value1", "param2": 123 }',
+				description: 'Variables to bind to the query or transaction',
 			},
 			{
 				displayName: 'Start Vertex',
@@ -716,6 +665,34 @@ export class ArangoDB implements INodeType {
 				},
 				default: 1,
 				description: 'Minimum traversal depth',
+			},
+			{
+				displayName: 'Vertex To Delete Key',
+				name: 'vertexToDeleteKey',
+				type: 'string',
+				displayOptions: {
+					show: {
+						resource: ['graph'],
+						graphOperation: ['deleteVertex'],
+					},
+				},
+				default: 'users/user1',
+				required: true,
+				description: 'The key of the vertex to delete (format: collection/key)',
+			},
+			{
+				displayName: 'Edge To Delete Key',
+				name: 'edgeToDeleteKey',
+				type: 'string',
+				displayOptions: {
+					show: {
+						resource: ['graph'],
+						graphOperation: ['deleteEdge'],
+					},
+				},
+				default: 'follows/edge1',
+				required: true,
+				description: 'The key of the edge to delete (format: collection/key)',
 			},
 		],
 	};
@@ -826,59 +803,49 @@ export class ArangoDB implements INodeType {
 					const vectorCollection = this.getNodeParameter('vectorCollection', i) as string;
 
 					switch (operation) {
-						case 'search': {
+						case 'searchCosine': {
 							const queryVector = this.getNodeParameter('queryVector', i) as string;
 							const vectorField = this.getNodeParameter('vectorField', i) as string;
 							const topK = this.getNodeParameter('topK', i) as number;
 							const vector = JSON.parse(queryVector);
 							
-							// Perform vector similarity search using AQL
-							const cursor = await db.query(aql`
-								FOR doc IN ${db.collection(vectorCollection)}
-								LET distance = DISTANCE(doc.${vectorField}, ${vector})
-								SORT distance ASC
-								LIMIT ${topK}
-								RETURN MERGE(doc, { _distance: distance })
-							`);
+							const cursor = await db.query(
+								`FOR doc IN @@collection
+								 LET similarity = COSINE_SIMILARITY(doc.@vectorField, @vector)
+								 SORT similarity DESC
+								 LIMIT @topK
+								 RETURN MERGE(doc, { _similarity: similarity })`,
+								{
+									'@collection': vectorCollection,
+									vectorField: vectorField,
+									vector: vector,
+									topK: topK
+								}
+							);
 							responseData = await cursor.all();
 							break;
 						}
 
-						case 'createIndex': {
-							const indexName = this.getNodeParameter('indexName', i) as string;
+						case 'searchL2': {
+							const queryVector = this.getNodeParameter('queryVector', i) as string;
 							const vectorField = this.getNodeParameter('vectorField', i) as string;
-							const dimensions = this.getNodeParameter('dimensions', i) as number;
-							const distanceMetric = this.getNodeParameter('distanceMetric', i) as string;
+							const topK = this.getNodeParameter('topK', i) as number;
+							const vector = JSON.parse(queryVector);
 							
-							// For vector search, we need to use a persistent index with computed values
-							// or store vectors as arrays and use AQL for similarity search
-							// Since ArangoDB doesn't have native vector index type, we'll create a persistent index
-							// and implement vector search using AQL
-							const result = await db.collection(vectorCollection).ensureIndex({
-								type: 'persistent',
-								name: indexName,
-								fields: [vectorField],
-								unique: false,
-								sparse: true,
-							});
-							
-							// Store metadata about vector configuration
-							await db.collection('_vector_metadata').save({
-								indexName,
-								collection: vectorCollection,
-								field: vectorField,
-								dimensions,
-								distanceMetric,
-							}, { overwriteMode: 'replace' });
-							
-							responseData = result;
-							break;
-						}
-
-						case 'deleteIndex': {
-							const indexName = this.getNodeParameter('indexName', i) as string;
-							const result = await db.collection(vectorCollection).dropIndex(indexName);
-							responseData = { success: result };
+							const cursor = await db.query(
+								`FOR doc IN @@collection
+								 LET distance = L2_DISTANCE(doc.@vectorField, @vector)
+								 SORT distance ASC
+								 LIMIT @topK
+								 RETURN MERGE(doc, { _distance: distance })`,
+								{
+									'@collection': vectorCollection,
+									vectorField: vectorField,
+									vector: vector,
+									topK: topK
+								}
+							);
+							responseData = await cursor.all();
 							break;
 						}
 					}
@@ -938,11 +905,20 @@ export class ArangoDB implements INodeType {
 							const minDepth = this.getNodeParameter('minDepth', i) as number;
 							const maxDepth = this.getNodeParameter('maxDepth', i) as number;
 							
-							const cursor = await db.query(aql`
-								FOR v, e, p IN ${minDepth}..${maxDepth} ${direction} ${startVertex}
-								GRAPH ${graphName}
+							// Build the query string with direction as part of the query
+							const query = `
+								FOR v, e, p IN ${minDepth}..${maxDepth} ${direction} @startVertex
+								GRAPH @graphName
 								RETURN { vertex: v, edge: e, path: p }
-							`);
+							`;
+							
+							const cursor = await db.query({
+								query: query,
+								bindVars: {
+									startVertex: startVertex,
+									graphName: graphName
+								}
+							});
 							responseData = await cursor.all();
 							break;
 						}
@@ -951,11 +927,16 @@ export class ArangoDB implements INodeType {
 							const startVertex = this.getNodeParameter('startVertex', i) as string;
 							const endVertex = this.getNodeParameter('endVertex', i) as string;
 							
-							const cursor = await db.query(aql`
-								FOR path IN SHORTEST_PATH ${startVertex} TO ${endVertex}
-								GRAPH ${graphName}
-								RETURN path
-							`);
+							const cursor = await db.query(
+								`FOR v, e IN OUTBOUND SHORTEST_PATH @startVertex TO @endVertex 
+								 GRAPH @graphName
+								 RETURN {vertices: v, edges: e}`,
+								{
+									startVertex: startVertex,
+									endVertex: endVertex,
+									graphName: graphName
+								}
+							);
 							responseData = await cursor.all();
 							break;
 						}
@@ -964,12 +945,36 @@ export class ArangoDB implements INodeType {
 							const startVertex = this.getNodeParameter('startVertex', i) as string;
 							const direction = this.getNodeParameter('direction', i) as string;
 							
-							const cursor = await db.query(aql`
-								FOR v IN 1..1 ${direction} ${startVertex}
-								GRAPH ${graphName}
+							const query = `
+								FOR v IN 1..1 ${direction} @startVertex
+								GRAPH @graphName
 								RETURN v
-							`);
+							`;
+							
+							const cursor = await db.query({
+								query: query,
+								bindVars: {
+									startVertex: startVertex,
+									graphName: graphName
+								}
+							});
 							responseData = await cursor.all();
+							break;
+						}
+
+						case 'deleteVertex': {
+							const vertexCollection = this.getNodeParameter('vertexCollection', i) as string;
+							const vertexToDeleteKey = this.getNodeParameter('vertexToDeleteKey', i) as string;
+							const result = await db.collection(vertexCollection).remove(vertexToDeleteKey);
+							responseData = { success: result };
+							break;
+						}
+
+						case 'deleteEdge': {
+							const edgeCollection = this.getNodeParameter('edgeCollection', i) as string;
+							const edgeToDeleteKey = this.getNodeParameter('edgeToDeleteKey', i) as string;
+							const result = await db.collection(edgeCollection).remove(edgeToDeleteKey);
+							responseData = { success: result };
 							break;
 						}
 					}
