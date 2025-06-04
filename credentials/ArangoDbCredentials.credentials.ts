@@ -4,9 +4,12 @@ import {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class ArangoDbCredentialsApi implements ICredentialType {
-	name = 'arangoDBCredentialsApi';
-	displayName = 'ArangoDB Credentials API';
+// eslint-disable-next-line n8n-nodes-base/cred-class-name-unsuffixed
+export class ArangoDbCredentials implements ICredentialType {
+	// eslint-disable-next-line n8n-nodes-base/cred-class-field-name-unsuffixed
+	name = 'arangoDbCredentials';
+	// eslint-disable-next-line n8n-nodes-base/cred-class-field-display-name-missing-api
+	displayName = 'ArangoDB Credentials';
 	documentationUrl = 'https://www.arangodb.com/docs/stable/http/';
 	properties: INodeProperties[] = [
 		{

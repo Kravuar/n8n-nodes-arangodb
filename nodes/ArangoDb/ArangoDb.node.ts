@@ -4,7 +4,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeApiError, NodeConnectionType, NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
 import { Database, aql } from 'arangojs';
 
 export class ArangoDb implements INodeType {
@@ -22,7 +22,8 @@ export class ArangoDb implements INodeType {
 		outputs: [NodeConnectionType.Main],
 		credentials: [
 			{
-				name: 'arangoDBCredentialsApi',
+				// eslint-disable-next-line n8n-nodes-base/node-class-description-credentials-name-unsuffixed
+				name: 'arangoDbCredentials',
 				required: true,
 			},
 		],
@@ -34,20 +35,24 @@ export class ArangoDb implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Document',
-						value: 'document',
+						name: 'Collection',
+						value: 'collection',
 					},
 					{
-						name: 'Vector Search',
-						value: 'vectorSearch',
+						name: 'Custom',
+						value: 'custom',
+					},
+					{
+						name: 'Document',
+						value: 'document',
 					},
 					{
 						name: 'Graph',
 						value: 'graph',
 					},
 					{
-						name: 'Custom',
-						value: 'custom',
+						name: 'Vector Search',
+						value: 'vectorSearch',
 					},
 				],
 				default: 'document',
@@ -275,7 +280,7 @@ export class ArangoDb implements INodeType {
 						vectorOperation: ['searchCosine', 'searchL2'],
 					},
 				},
-				default: '[]',
+				default: '[1, 2, 3]',
 				required: true,
 				description: 'The vector to search for (as JSON array)',
 			},
@@ -375,11 +380,6 @@ export class ArangoDb implements INodeType {
 						value: 'runTransaction',
 						description: 'Run a custom transaction',
 					},
-					{
-						name: 'Bulk Operation',
-						value: 'bulkOperation',
-						description: 'Execute bulk operations',
-					},
 				],
 				default: 'executeAql',
 				noDataExpression: true,
@@ -446,23 +446,6 @@ export class ArangoDb implements INodeType {
 				},
 			},
 			{
-				displayName: 'Bulk Operations',
-				name: 'bulkOperations',
-				type: 'json',
-				displayOptions: {
-					show: {
-						resource: ['custom'],
-						customOperation: ['bulkOperation'],
-					},
-				},
-				default: '[{"operation": "insert", "collection": "myCollection", "data": [{"_key": "doc1", "value": 1}, {"value": 2}]}]',
-				required: true,
-				description: 'Array of bulk operations to execute',
-				typeOptions: {
-					rows: 10,
-				},
-			},
-			{
 				displayName: 'Return Count',
 				name: 'returnCount',
 				type: 'boolean',
@@ -489,6 +472,60 @@ export class ArangoDb implements INodeType {
 				description: 'Number of results to return in each batch',
 			},
 			
+			// Collection Operations
+			{
+				displayName: 'Operation',
+				name: 'collectionOperation',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: ['collection'],
+					},
+				},
+				options: [
+					{
+						name: 'Create',
+						value: 'create',
+						description: 'Create a new collection',
+					},
+					{
+						name: 'Delete',
+						value: 'delete',
+						description: 'Delete a collection',
+					},
+				],
+				default: 'create',
+				noDataExpression: true,
+			},
+			{
+				displayName: 'Collection Name',
+				name: 'collectionName',
+				type: 'string',
+				displayOptions: {
+					show: {
+						resource: ['collection'],
+						collectionOperation: ['create', 'delete'],
+					},
+				},
+				default: '',
+				required: true,
+				description: 'The name of the collection',
+			},
+
+			{
+				displayName: 'Filter',
+				name: 'filter',
+				type: 'json',
+				displayOptions: {
+					show: {
+						resource: ['document'],
+						documentOperation: ['getMany'],
+					},
+				},
+				default: '{}',
+				description: 'Optional filter to apply to the documents (JSON)',
+			},
+
 			{
 				displayName: 'Graph Name',
 				name: 'graphName',
@@ -700,7 +737,7 @@ export class ArangoDb implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
-		const credentials = await this.getCredentials('arangoDBCredentialsApi');
+		const credentials = await this.getCredentials('arangoDbCredentials');
 		
 		const host = credentials.host as string;
 		const port = credentials.port as string;
@@ -746,11 +783,39 @@ export class ArangoDb implements INodeType {
 
 						case 'getMany': {
 							const limit = this.getNodeParameter('limit', i) as number;
-							const cursor = await db.query(aql`
-								FOR doc IN ${db.collection(collection)}
-								LIMIT ${limit}
-								RETURN doc
-							`);
+							const filter = this.getNodeParameter('filter', i) as string;
+							const filterData = JSON.parse(filter);
+						
+							let query;
+							const bindVars: { [key: string]: any } = {};
+						
+							if (Object.keys(filterData).length > 0) {
+								const filters = Object.keys(filterData).map(key => {
+									bindVars[`value_${key}`] = filterData[key];
+									return `doc.${key} == @value_${key}`;
+								});
+								const filterQuery = `FILTER ${filters.join(' AND ')}`;
+								
+								// Build the query as a string
+								query = `
+									FOR doc IN ${collection}
+									${filterQuery}
+									LIMIT @limit
+									RETURN doc
+								`;
+							} else {
+								query = `
+									FOR doc IN ${collection}
+									LIMIT @limit
+									RETURN doc
+								`;
+							}
+						
+							// Add limit to bindVars
+							bindVars.limit = limit;
+						
+							// Execute the query
+							const cursor = await db.query(query, bindVars);
 							responseData = await cursor.all();
 							break;
 						}
@@ -1020,70 +1085,21 @@ export class ArangoDb implements INodeType {
 							);
 							break;
 						}
-				
-						case 'bulkOperation': {
-							const bulkOperations = this.getNodeParameter('bulkOperations', i) as string;
-							const operations = JSON.parse(bulkOperations);
-							const results = [];
-							
-							for (const op of operations) {
-								let result;
-								const collection = db.collection(op.collection);
-								
-								switch (op.operation) {
-									case 'insert':
-										result = await collection.import(op.data, {
-											type: 'documents',
-											onDuplicate: op.onDuplicate || 'error',
-										});
-										break;
-									case 'update':
-										// Update multiple documents using AQL
-										const updateCursor = await db.query(aql`
-											FOR doc IN ${collection}
-											FILTER MATCHES(doc, ${op.example})
-											UPDATE doc WITH ${op.newData} IN ${collection}
-											OPTIONS { keepNull: ${op.keepNull || true} }
-											RETURN NEW
-										`);
-										result = await updateCursor.all();
-										break;
-									case 'remove':
-										// Remove multiple documents using AQL
-										const removeCursor = await db.query(aql`
-											FOR doc IN ${collection}
-											FILTER MATCHES(doc, ${op.example})
-											REMOVE doc IN ${collection}
-											OPTIONS { waitForSync: ${op.waitForSync || false} }
-											RETURN OLD
-										`);
-										result = await removeCursor.all();
-										break;
-									case 'replace':
-										// Replace multiple documents using AQL
-										const replaceCursor = await db.query(aql`
-											FOR doc IN ${collection}
-											FILTER MATCHES(doc, ${op.example})
-											REPLACE doc WITH ${op.newData} IN ${collection}
-											OPTIONS { waitForSync: ${op.waitForSync || false} }
-											RETURN NEW
-										`);
-										result = await replaceCursor.all();
-										break;
-									default:
-										throw new NodeApiError(
-											this.getNode(),
-											{error: `Unknown bulk operation: ${op.operation}`},
-											{ itemIndex: i },
-										);
-								}
-								results.push({
-									operation: op.operation,
-									collection: op.collection,
-									result,
-								});
-							}
-							responseData = results;
+					}
+				} else if (resource === 'collection') {
+					const operation = this.getNodeParameter('collectionOperation', i) as string;
+					const collectionName = this.getNodeParameter('collectionName', i) as string;
+
+					switch (operation) {
+						case 'create': {
+							const result = await db.createCollection(collectionName);
+							responseData = result;
+							break;
+						}
+
+						case 'delete': {
+							const result = await db.collection(collectionName).drop();
+							responseData = result;
 							break;
 						}
 					}

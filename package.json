@@ -33,7 +33,7 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/ArangoDBCredentialsApi.credentials.js"
+      "dist/credentials/ArangoDbCredentials.credentials.js"
     ],
     "nodes": [
       "dist/nodes/ArangoDB/ArangoDBNode.node.js"
