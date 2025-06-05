@@ -5,7 +5,7 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionType, NodeOperationError } from 'n8n-workflow';
-import { Database, aql } from 'arangojs';
+import { Database } from 'arangojs';
 
 export class ArangoDb implements INodeType {
 	description: INodeTypeDescription = {
