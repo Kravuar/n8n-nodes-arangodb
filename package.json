@@ -36,7 +36,7 @@
       "dist/credentials/ArangoDbCredentials.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/ArangoDb/ArangoDbNode.node.js"
+      "dist/nodes/ArangoDb/ArangoDb.node.js"
     ]
   },
   "devDependencies": {
