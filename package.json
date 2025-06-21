@@ -13,7 +13,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kravuar/n8n-nodes-arangodb/n8n-nodes-arangodb.git"
+    "url": "git+https://github.com/kravuar/n8n-nodes-arangodb.git"
   },
   "engines": {
     "node": ">=20.15"
